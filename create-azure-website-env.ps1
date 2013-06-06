@@ -51,10 +51,10 @@ Function Generate-EnvironmentXml
         [String]$DatabasePassword
     )
 
-    [String]$template = Get-Content ("{0}\environment.template" -f $scriptPath)
+    [String]$template = Get-Content ("{0}\website-environment.template" -f $scriptPath)
 
     ($template -f $EnvironmentName, $WebsiteName, $StorageAccountName, $StorageAccountAccessKey, $DatabaseServerName, $DatabaseName, $DatabaseUserName, $DatabasePassword) `
-        | Out-File -Encoding utf8 ("{0}\environment.xml" -f $scriptPath)
+        | Out-File -Encoding utf8 ("{0}\website-environment.xml" -f $scriptPath)
 }
 
 # Generate the publish xml which will be used by MSBuild to deploy the project to website.
