@@ -25,7 +25,7 @@ $startTime = Get-Date
 Write-Verbose ("[Start] deploying to Windows Azure website {0}" -f $websiteName)
 
 # Read from environment.xml to get the environment name
-[Xml]$envXml = Get-Content ("{0}\environment.xml" -f $scriptPath)
+[Xml]$envXml = Get-Content ("{0}\website-environment.xml" -f $scriptPath)
 $websiteName = $envXml.environment.name
 
 # Read from the publish settings file to get the deploy password
