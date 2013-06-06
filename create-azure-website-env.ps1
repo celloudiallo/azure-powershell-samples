@@ -62,29 +62,30 @@ Function Generate-PublishXml
 {
     Param(
         [Parameter(Mandatory = $true)]
-        [Microsoft.WindowsAzure.Management.Utilities.Websites.Services.WebEntities.SiteWithConfig]$Website
+        [String]$WebsiteName
     )
     
     # Get the current subscription you are working on
     $s = Get-AzureSubscription -Current
     # Get the certificate of the current subscription from your local cert store
     $cert = Get-ChildItem ("Cert:\CurrentUser\My\{0}" -f $s.Certificate.Thumbprint)
+    $website = Get-AzureWebsite -Name $WebsiteName
     # Compose the REST API URI from which you will get the publish settings info
     $uri = "https://management.core.windows.net:8443/{0}/services/WebSpaces/{1}/sites/{2}/publishxml" -f `
-        $s.SubscriptionId, $Website.WebSpace, $Website.Name
+        $s.SubscriptionId, $website.WebSpace, $Website.Name
 
     # Get the publish settings info from the REST API
     $publishSettings = Invoke-RestMethod -Uri $uri -Certificate $cert -Headers @{"x-ms-version" = "2013-06-01"}
 
     # Save the publish settings info into a .publishsettings file
     # and read the content as xml
-    $publishSettings.InnerXml > ("{0}\{1}.publishsettings" -f $scriptPath, $Website.Name)
-    [Xml]$xml = Get-Content ("{0}\{1}.publishsettings" -f $scriptPath, $Website.Name)
+    $publishSettings.InnerXml > ("{0}\{1}.publishsettings" -f $scriptPath, $WebsiteName)
+    [Xml]$xml = Get-Content ("{0}\{1}.publishsettings" -f $scriptPath, $WebsiteName)
 
     # Get the publish xml template and generate the .pubxml file
     [String]$template = Get-Content ("{0}\pubxml.template" -f $scriptPath)
-    ($template -f $Website.HostNames[0], $xml.publishData.publishProfile.publishUrl.Get(0), $Website.Name) `
-        | Out-File -Encoding utf8 ("{0}\{1}.pubxml" -f $scriptPath, $Website.Name)
+    ($template -f $website.HostNames[0], $xml.publishData.publishProfile.publishUrl.Get(0), $WebsiteName) `
+        | Out-File -Encoding utf8 ("{0}\{1}.pubxml" -f $scriptPath, $WebsiteName)
 }
 
 # End - Helper funtions -----------------------------------------------------------------------------------------------------------------------------
@@ -182,7 +183,7 @@ Write-Verbose "[Finish] writing environment info to environment.xml"
 
 # Generate the .pubxml file which will be used by webdeploy later
 Write-Verbose ("[Begin] generating {0}.pubxml file" -f $websiteName)
-Generate-PublishXml -Website $website
+Generate-PublishXml -Website $websiteName
 Write-Verbose ("{0}\{1}.pubxml" -f $scriptPath, $websiteName )
 Write-Verbose ("[Finish] generating {0}.pubxml file" -f $websiteName)
 
