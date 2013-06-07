@@ -10,34 +10,26 @@ Function Generate-Cscfg
         [String]$SourceCscfgFile
     )
 
-    # Get content of the project default ServiceConfiguration.Cloud.cscfg
-    [Xml]$cscfgXml = Get-Content $SourceCscfgFile #("{0}\ServiceConfiguration.Cloud.cscfg" -f (Get-Item $ProjectFile).DirectoryName)
+    # Get content of the project source cscfg file
+    [Xml]$cscfgXml = Get-Content $SourceCscfgFile
 
     # Update the cscfg in memory
     Foreach ($role in $cscfgXml.ServiceConfiguration.Role)
     {
 
-        # Change the diagnostics connection string to use the storage account created by create-azure-cloud-service-env.ps1
-        Foreach ($setting in $role.ConfigurationSettings)
+        # Change the
+        # 1. diagnostics connection string to use the storage account
+        # 2. appdb connection string to use the SQL Azure appdb
+        # 3. DefaultConnection connection string to use the SQL Azure memberdb
+        Foreach ($setting in $role.ConfigurationSettings.Setting)
         {
-            If ($setting.FirstChild.name -eq "Microsoft.WindowsAzure.Plugins.Diagnostics.ConnectionString")
+            Switch ($setting.name)
             {
-                $setting.FirstChild.value = $EnvXml.environment.storage.connectionString
-                Break
+                "Microsoft.WindowsAzure.Plugins.Diagnostics.ConnectionString" {$setting.value = $EnvXml.environment.storage.connectionString}
+                "appdb" {$setting.value = $EnvXml.environment.sqlAzure.appdb.connectionString}
+                "DefaultConnection" {$setting.value = $EnvXml.environment.sqlAzure.memberdb.connectionString}
             }
         }
-
-        # Add the connection string for appdb
-        $setting1 = $cscfgXml.CreateElement("Setting", "http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration")
-        $setting1.SetAttribute("name", "appdb")
-        $setting1.SetAttribute("value", $EnvXml.environment.sqlAzure.appdb.connectionString)
-        $temp = $role.ConfigurationSettings.AppendChild($setting1)
-
-        # Add the connection string for DefaultConnection
-        $setting2 = $cscfgXml.CreateElement("Setting", "http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration")
-        $setting2.SetAttribute("name", "DefaultConnection")
-        $setting2.SetAttribute("value", $EnvXml.environment.sqlAzure.memberdb.connectionString)
-        $temp = $role.ConfigurationSettings.AppendChild($setting2)
     }
 
     $file = "{0}\ServiceConfiguration.{1}.cscfg" -f $scriptPath, $EnvXml.environment.name
@@ -56,16 +48,17 @@ $startTime = Get-Date
 $scriptPath = Split-Path -parent $PSCommandPath
 
 $publishDir = "{0}\" -f $scriptPath
-
-# Generate the cscfg and cspkg files
-& "$env:windir\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe" $ProjectFile /t:Publish /p:TargetProfile=Local /p:PublishDir=$publishDir
+$cspkg = "{0}\{1}.cspkg" -f $scriptPath, (Get-Item $ProjectFile).BaseName
 
 # Read from cloud-service-environment.xml to get the environment name
 [Xml]$envXml = Get-Content ("{0}\cloud-service-environment.xml" -f $scriptPath)
-
 $cloudServiceName = $envXml.environment.name
-$cscfg = Generate-Cscfg -EnvXml $envXml -SourceCscfgFile ("{0}ServiceConfiguration.Local.cscfg" -f $publishDir)
-$cspkg = "{0}\{1}.cspkg" -f $scriptPath, (Get-Item $ProjectFile).BaseName
+
+# Generate the custom cscfg file
+$cscfg = Generate-Cscfg -EnvXml $envXml -SourceCscfgFile ("{0}\ServiceConfiguration.Local.cscfg" -f (Get-Item $ProjectFile).DirectoryName)
+
+# Generate the cspkg file
+& "$env:windir\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe" $ProjectFile /t:Publish /p:TargetProfile=Local /p:PublishDir=$publishDir
 
 # If there is no existing deployment on the cloud service, create a new deployment
 # Otherwise, upgrade the deployment using simultaneous mode
