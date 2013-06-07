@@ -97,7 +97,7 @@ $Name = $Name.ToLower()
 $websiteName = $Name
 $storageAccountName = "{0}storage" -f $Name
 $sqlAppDatabaseName = "appdb"
-$sqlMemberDatabaseName = "DefaultConnection"
+$sqlMemberDatabaseName = "memberdb"
 $sqlDatabaseServerFirewallRuleName = "{0}rule" -f $Name
 
 # Create a new website
@@ -124,7 +124,7 @@ $sql = & "$scriptPath\create-azure-sql.ps1" `
 Write-Verbose ("[Start] Adding settings to website {0}" -f $websiteName)
 Write-Verbose "Connection Strings"
 Write-Verbose ("{0} = {1}" -f $sqlDatabaseName, $sql.AppDatabase.ConnectionString)
-Write-Verbose ("{0} = {1}" -f $sqlMemberDatabaseName, $sql.MemberDatabase.ConnectionString)
+Write-Verbose ("{0} = {1}" -f "DefaultConnection", $sql.MemberDatabase.ConnectionString)
 Write-Verbose "App Settings"
 Write-Verbose ("{0} = {1}" -f "StorageAccountName", $storageAccountName)
 Write-Verbose ("{0} = {1}" -f "StorageAccountAccessKey", $storage.AccessKey)
@@ -142,7 +142,7 @@ $appSettings = @{ `
 # Configure connection strings for appdb and ASP.NET member db
 $connectionStrings = ( `
     @{Name = $sqlAppDatabaseName; Type = "SQLAzure"; ConnectionString = $sql.AppDatabase.ConnectionString}, `
-    @{Name = $sqlMemberDatabaseName; Type = "SQLAzure"; ConnectionString = $sql.MemberDatabase.ConnectionString}
+    @{Name = "DefaultConnection"; Type = "SQLAzure"; ConnectionString = $sql.MemberDatabase.ConnectionString}
 )
 
 # Add the connection string and storage account name/key to the website
