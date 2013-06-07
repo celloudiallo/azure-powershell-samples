@@ -58,7 +58,7 @@ Write-Verbose ("[Start] creating Windows Azure cloud service environment {0}" -f
 $Name = $Name.ToLower()
 $storageAccountName = "{0}storage" -f $Name
 $sqlAppDatabaseName = "appdb"
-$sqlMemberDatabaseName = "DefaultConnection"
+$sqlMemberDatabaseName = "memberdb"
 $sqlDatabaseServerFirewallRuleName = "{0}rule" -f $Name
 
 # Get the directory of the current script
