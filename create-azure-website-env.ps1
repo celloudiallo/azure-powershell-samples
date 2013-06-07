@@ -23,38 +23,25 @@ Param(
 
 # Begin - Helper functions --------------------------------------------------------------------------------------------------------------------------
 
-# Generate connection string of a given SQL Azure database
-Function Get-SQLAzureDatabaseConnectionString
-{
-    Param(
-        [String]$DatabaseServerName,
-        [String]$DatabaseName,
-        [String]$UserName,
-        [String]$Password
-    )
-
-    Return "Server=tcp:{0}.database.windows.net,1433;Database={1};User ID={2}@{0};Password={3};Trusted_Connection=False;Encrypt=True;Connection Timeout=30;" -f
-        $DatabaseServerName, $DatabaseName, $UserName, $Password
-}
-
 # Generate environment xml file, which will be used by the deploy script later.
 Function Generate-EnvironmentXml
 {
     Param(
         [String]$EnvironmentName,
         [String]$WebsiteName,
-        [String]$StorageAccountName,
-        [String]$StorageAccountAccessKey,
-        [String]$DatabaseServerName,
-        [String]$DatabaseName,
-        [String]$DatabaseUserName,
-        [String]$DatabasePassword
+        [Object]$Storage,
+        [Object]$Sql
     )
 
     [String]$template = Get-Content ("{0}\website-environment.template" -f $scriptPath)
 
-    ($template -f $EnvironmentName, $WebsiteName, $StorageAccountName, $StorageAccountAccessKey, $DatabaseServerName, $DatabaseName, $DatabaseUserName, $DatabasePassword) `
-        | Out-File -Encoding utf8 ("{0}\website-environment.xml" -f $scriptPath)
+    $xml = $template -f $EnvironmentName, $WebsiteName, `
+                        $Storage.AccountName, $Storage.AccessKey, $Storage.ConnectionString, `
+                        ([String]$Sql.Server).Trim(), $Sql.UserName, $Sql.Password, `
+                        $Sql.AppDatabase.Name, $Sql.AppDatabase.ConnectionString, `
+                        $Sql.MemberDatabase.Name, $Sql.MemberDatabase.ConnectionString
+    
+    $xml | Out-File -Encoding utf8 ("{0}\website-environment.xml" -f $scriptPath)
 }
 
 # Generate the publish xml which will be used by MSBuild to deploy the project to website.
@@ -109,7 +96,8 @@ $scriptPath = Split-Path -parent $PSCommandPath
 $Name = $Name.ToLower()
 $websiteName = $Name
 $storageAccountName = "{0}storage" -f $Name
-$sqlDatabaseName = "appdb"
+$sqlAppDatabaseName = "appdb"
+$sqlMemberDatabaseName = "DefaultConnection"
 $sqlDatabaseServerFirewallRuleName = "{0}rule" -f $Name
 
 # Create a new website
@@ -118,43 +106,33 @@ $website = New-AzureWebsite -Name $websiteName -Location $Location -Verbose
 Write-Verbose ("[Finish] creating website {0} in location {1}" -f $websiteName, $Location)
 
 # Create a new storage account
-$storageAccount = & "$scriptPath\create-azure-storage.ps1" `
+$storage = & "$scriptPath\create-azure-storage.ps1" `
     -Name $storageAccountName `
     -Location $Location
 
-# Create a SQL Azure database server and a database
+# Create a SQL Azure database server, app and member databases
 $sql = & "$scriptPath\create-azure-sql.ps1" `
-    -DatabaseName $sqlDatabaseName `
+    -AppDatabaseName $sqlAppDatabaseName `
+    -MemberDatabaseName $sqlMemberDatabaseName `
     -UserName $SqlDatabaseUserName `
     -Password $SqlDatabasePassword `
     -FirewallRuleName $sqlDatabaseServerFirewallRuleName `
-    -Location $Location `
     -StartIPAddress $StartIPAddress `
-    -EndIPAddress $EndIPAddress
+    -EndIPAddress $EndIPAddress `
+    -Location $Location
 
-$sqlDatabaseServerName = $sql.Server.ServerName
-
-# Get the connection string of the SQL Azure database
-$appDBConnectionString = Get-SQLAzureDatabaseConnectionString -DatabaseServerName $sqlDatabaseServerName `
-    -DatabaseName $sqlDatabaseName -UserName $SqlDatabaseUserName -Password $SqlDatabasePassword
-$memberDBConnectionString = Get-SQLAzureDatabaseConnectionString -DatabaseServerName $sqlDatabaseServerName `
-    -DatabaseName "memberdb" -UserName $SqlDatabaseUserName -Password $SqlDatabasePassword
-# Get the access key of the storage account
-$storageAccountAccessKey = Get-AzureStorageKey -StorageAccountName $storageAccountName -Verbose
-
-# Add the connection string and storage account name/key to the website
 Write-Verbose ("[Start] Adding settings to website {0}" -f $websiteName)
 Write-Verbose "Connection Strings"
-Write-Verbose ("{0} = {1}" -f $sqlDatabaseName, $appDBConnectionString)
-Write-Verbose ("{0} = {1}" -f "DefaultConnection", $memberDBConnectionString)
+Write-Verbose ("{0} = {1}" -f $sqlDatabaseName, $sql.AppDatabase.ConnectionString)
+Write-Verbose ("{0} = {1}" -f $sqlMemberDatabaseName, $sql.MemberDatabase.ConnectionString)
 Write-Verbose "App Settings"
 Write-Verbose ("{0} = {1}" -f "StorageAccountName", $storageAccountName)
-Write-Verbose ("{0} = {1}" -f "StorageAccountAccessKey", $storageAccountAccessKey.Primary)
+Write-Verbose ("{0} = {1}" -f "StorageAccountAccessKey", $storage.AccessKey)
 
 # Configure app settings for storage account and New Relic
 $appSettings = @{ `
     "StorageAccountName" = $storageAccountName; `
-    "StorageAccountAccessKey" = $storageAccountAccessKey.Primary; `
+    "StorageAccountAccessKey" = $storage.AccessKey; `
     "COR_ENABLE_PROFILING" = "1"; `
     "COR_PROFILER" = "{71DA0A04-7777-4EC6-9643-7D28B46A8A41}"; `
     "COR_PROFILER_PATH" = "C:\Home\site\wwwroot\newrelic\NewRelic.Profiler.dll"; `
@@ -163,10 +141,11 @@ $appSettings = @{ `
 
 # Configure connection strings for appdb and ASP.NET member db
 $connectionStrings = ( `
-    @{Name = $sqlDatabaseName; Type = "SQLAzure"; ConnectionString = $appDBConnectionString}, `
-    @{Name = "DefaultConnection"; Type = "SQLAzure"; ConnectionString = $memberDBConnectionString}
+    @{Name = $sqlAppDatabaseName; Type = "SQLAzure"; ConnectionString = $sql.AppDatabase.ConnectionString}, `
+    @{Name = $sqlMemberDatabaseName; Type = "SQLAzure"; ConnectionString = $sql.MemberDatabase.ConnectionString}
 )
 
+# Add the connection string and storage account name/key to the website
 Set-AzureWebsite -Name $websiteName -AppSettings $appSettings -ConnectionStrings $connectionStrings
 
 Write-Verbose ("[Finish] Adding settings to website {0}" -f $websiteName)
@@ -174,12 +153,10 @@ Write-Verbose ("[Finish] Adding settings to website {0}" -f $websiteName)
 Write-Verbose ("[Finish] creating Windows Azure environment {0}" -f $Name)
 
 # Write the environment info to an xml file so that the deploy script can consume
-Write-Verbose "[Begin] writing environment info to environment.xml"
-Generate-EnvironmentXml -EnvironmentName $Name -WebsiteName $websiteName `
-    -StorageAccountName $storageAccountName -StorageAccountAccessKey $storageAccountAccessKey.Primary `
-    -DatabaseServerName $sqlDatabaseServerName -DatabaseName $sqlDatabaseName -DatabaseUserName $SqlDatabaseUserName -DatabasePassword $SqlDatabasePassword
-Write-Verbose ("{0}\environment.xml" -f $scriptPath)
-Write-Verbose "[Finish] writing environment info to environment.xml"
+Write-Verbose "[Begin] writing environment info to website-environment.xml"
+Generate-EnvironmentXml -EnvironmentName $Name -WebsiteName $websiteName -Storage $storage -Sql $sql
+Write-Verbose ("{0}\website-environment.xml" -f $scriptPath)
+Write-Verbose "[Finish] writing environment info to website-environment.xml"
 
 # Generate the .pubxml file which will be used by webdeploy later
 Write-Verbose ("[Begin] generating {0}.pubxml file" -f $websiteName)
