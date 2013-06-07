@@ -1,6 +1,7 @@
 ﻿Param(
     [Parameter(Mandatory = $true)]
-    [String]$ProjectFile
+    [String]$ProjectFile,          # Point to the .ccproj file of the project you want to deploy
+    [Switch]$Launch                # Use this switch parameter if you want to launch a browser to show the website
 )
 
 Function Generate-Cscfg
@@ -81,3 +82,9 @@ If ($deployment)
 $finishTime = Get-Date
 # Output the time consumed in seconds
 Write-Output ("Total time used (seconds): {0}" -f ($finishTime - $startTime).TotalSeconds)
+
+# Launch the browser to show the website
+If ($Launch)
+{
+    Start-Process -FilePath ("http://{0}.cloudapp.net" -f $cloudServiceName)
+}
