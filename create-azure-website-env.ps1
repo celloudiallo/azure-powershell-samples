@@ -148,6 +148,9 @@ $connectionStrings = ( `
 # Add the connection string and storage account name/key to the website
 Set-AzureWebsite -Name $websiteName -AppSettings $appSettings -ConnectionStrings $connectionStrings
 
+# Restart the website to let New Relic hook kick in
+Restart-AzureWebsite -Name $websiteName
+
 Write-Verbose ("[Finish] Adding settings to website {0}" -f $websiteName)
 
 Write-Verbose ("[Finish] creating Windows Azure environment {0}" -f $Name)
