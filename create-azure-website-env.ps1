@@ -1,5 +1,5 @@
 ﻿# How to run the script
-# create-azure-env.ps1 -Name yourwebsitename -SqlDatabasePassw0rd P@ssw0rd
+# create-azure-website-env.ps1 -Name yourwebsitename -SqlDatabasePassw0rd P@ssw0rd
 
 # Define input parameters
 Param(

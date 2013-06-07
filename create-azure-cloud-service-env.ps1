@@ -1,4 +1,7 @@
-﻿Param(
+﻿# How to run the script
+# create-azure-cloud-service-env.ps1 -Name yourcloudservicename -SqlDatabasePassw0rd P@ssw0rd
+
+Param(
     [Parameter(Mandatory = $true)]
     [String]$Name,
 
