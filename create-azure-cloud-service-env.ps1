@@ -16,6 +16,33 @@
     [String]$EndIPAddress                      #             will try to detect if not specified
 )
 
+# Begin - Helper functions --------------------------------------------------------------------------------------------------------------------------
+
+# Generate environment xml file, which will be used by the deploy script later.
+Function Generate-EnvironmentXml
+{
+    Param(
+        [String]$EnvironmentName,
+        [String]$CloudServiceName,
+        [Object]$Storage,
+        [Object]$Sql
+    )
+
+    [String]$template = Get-Content ("{0}\cloud-service-environment.template" -f $scriptPath)
+
+    $xml = $template -f $EnvironmentName, $CloudServiceName, `
+                        $Storage.AccountName, $Storage.AccessKey, $Storage.ConnectionString, `
+                        ([String]$Sql.Server).Trim(), $Sql.UserName, $Sql.Password, `
+                        $Sql.AppDatabase.Name, $Sql.AppDatabase.ConnectionString, `
+                        $Sql.MemberDatabase.Name, $Sql.MemberDatabase.ConnectionString
+    
+    $xml | Out-File -Encoding utf8 ("{0}\cloud-service-environment.xml" -f $scriptPath)
+}
+
+# End - Helper functions --------------------------------------------------------------------------------------------------------------------------
+
+# Begin - Actual script -----------------------------------------------------------------------------------------------------------------------------
+
 $VerbosePreference = "Continue"
 $ErrorActionPreference = "Stop"
 
@@ -27,7 +54,8 @@ Write-Verbose ("[Start] creating Windows Azure cloud service environment {0}" -f
 # Define the names of storage account, SQL Azure database and SQL Azure database server firewall rule
 $Name = $Name.ToLower()
 $storageAccountName = "{0}storage" -f $Name
-$sqlDatabaseName = "appdb"
+$sqlAppDatabaseName = "appdb"
+$sqlMemberDatabaseName = "DefaultConnection"
 $sqlDatabaseServerFirewallRuleName = "{0}rule" -f $Name
 
 # Get the directory of the current script
@@ -39,13 +67,14 @@ New-AzureService -ServiceName $Name -Location $Location
 Write-Verbose ("[Finish] creating cloud service {0} in location {1}" -f $Name, $Location)
 
 # Create a new storage account
-$storageAccount = & "$scriptPath\create-azure-storage.ps1" `
+$storage = & "$scriptPath\create-azure-storage.ps1" `
     -Name $storageAccountName `
     -Location $Location
 
-# Create a SQL Azure database server and a database
+# Create a SQL Azure database server, app and member databases
 $sql = & "$scriptPath\create-azure-sql.ps1" `
-    -DatabaseName $sqlDatabaseName `
+    -AppDatabaseName $sqlAppDatabaseName `
+    -MemberDatabaseName $sqlMemberDatabaseName `
     -UserName $SqlDatabaseUserName `
     -Password $SqlDatabasePassword `
     -FirewallRuleName $sqlDatabaseServerFirewallRuleName `
@@ -56,11 +85,19 @@ $sql = & "$scriptPath\create-azure-sql.ps1" `
 # Set the default storage account of the subscription
 # This storage account will be used when deploying the cloud service cspkg
 $s = Get-AzureSubscription -Current
-Set-AzureSubscription -SubscriptionName $s.SubscriptionName -CurrentStorageAccount $storageAccountName
+Set-AzureSubscription -SubscriptionName $s.SubscriptionName -CurrentStorageAccount $storage.AccountName
 
 Write-Verbose ("[Finish] creating Windows Azure cloud service environment {0}" -f $Name)
+
+# Write the environment info to an xml file so that the deploy script can consume
+Write-Verbose "[Begin] writing environment info to cloud-service-environment.xml"
+Generate-EnvironmentXml -EnvironmentName $Name -CloudServiceName $Name -Storage $storage -Sql $sql
+Write-Verbose ("{0}\cloud-service-environment.xml" -f $scriptPath)
+Write-Verbose "[Finish] writing environment info to cloud-service-environment.xml"
 
 # Mark the finish time of the script execution
 $finishTime = Get-Date
 # Output the time consumed in seconds
 Write-Output ("Total time used (seconds): {0}" -f ($finishTime - $startTime).TotalSeconds)
+
+# End - Actual script -----------------------------------------------------------------------------------------------------------------------------
